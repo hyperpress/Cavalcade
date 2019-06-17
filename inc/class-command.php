@@ -21,9 +21,14 @@ class Command extends WP_CLI_Command {
 		if ( empty( $job ) ) {
 			WP_CLI::error( 'Invalid job ID' );
 		}
+		// Make the current job id available for hooks run by this job
+		define( 'CAVALCADE_JOB_ID', $job->id );
 
 		// Handle SIGTERM calls as we don't want to kill a running job
 		pcntl_signal( SIGTERM, SIG_IGN );
+
+		// Set the wp-cron constant for plugin and theme interactions
+		defined( 'DOING_CRON' ) or define( 'DOING_CRON', true );
 
 		/**
 		 * Fires scheduled events.
@@ -48,23 +53,23 @@ class Command extends WP_CLI_Command {
 		$log_table = $wpdb->base_prefix . 'cavalcade_logs';
 		$job_table = $wpdb->base_prefix . 'cavalcade_jobs';
 
-		$assoc_args = wp_parse_args( $assoc_args, array(
+		$assoc_args = wp_parse_args( $assoc_args, [
 			'format'  => 'table',
 			'fields'  => 'job,hook,timestamp,status',
 			'hook'    => null,
 			'job'     => null,
-		));
+		]);
 
-		$where = array();
-		$data  = array();
+		$where = [];
+		$data  = [];
 
 		if ( $assoc_args['job'] ) {
-			$where[] = "job = %d";
+			$where[] = 'job = %d';
 			$data[]  = $assoc_args['job'];
 		}
 
 		if ( $assoc_args['hook'] ) {
-			$where[] = "hook = %s";
+			$where[] = 'hook = %s';
 			$data[] = $assoc_args['hook'];
 		}
 
@@ -90,7 +95,7 @@ class Command extends WP_CLI_Command {
 
 		global $wpdb;
 
-		$assoc_args = wp_parse_args( $assoc_args, array(
+		$assoc_args = wp_parse_args( $assoc_args, [
 			'format'  => 'table',
 			'fields'  => 'id,site,hook,start,nextrun,status',
 			'id'      => null,
@@ -99,36 +104,36 @@ class Command extends WP_CLI_Command {
 			'status'  => null,
 			'limit'   => 20,
 			'page'    => 1,
-		));
+		]);
 
-		$where = array();
-		$data  = array();
+		$where = [];
+		$data  = [];
 
 		if ( $assoc_args['id'] ) {
-			$where[] = "id = %d";
+			$where[] = 'id = %d';
 			$data[]  = $assoc_args['id'];
 		}
 
 		if ( $assoc_args['site'] ) {
-			$where[] = "site = %d";
+			$where[] = 'site = %d';
 			$data[]  = $assoc_args['site'];
 		}
 
 		if ( $assoc_args['hook'] ) {
-			$where[] = "hook = %s";
+			$where[] = 'hook = %s';
 			$data[] = $assoc_args['hook'];
 		}
 
 		if ( $assoc_args['status'] ) {
-			$where[] = "status = %s";
+			$where[] = 'status = %s';
 			$data[] = $assoc_args['status'];
 		}
 
 		$where = $where ? 'WHERE ' . implode( ' AND ', $where ) : '';
 
-		$limit = "LIMIT %d";
+		$limit = 'LIMIT %d';
 		$data[] = absint( $assoc_args['limit'] );
-		$offset = "OFFSET %d";
+		$offset = 'OFFSET %d';
 		$data[] = absint( ( $assoc_args['page'] - 1 ) * $assoc_args['limit'] );
 
 		$query = "SELECT * FROM {$wpdb->base_prefix}cavalcade_jobs $where $limit $offset";
@@ -145,5 +150,17 @@ class Command extends WP_CLI_Command {
 			\WP_CLI\Utils\format_items( $assoc_args['format'], $logs, explode( ',', $assoc_args['fields'] ) );
 		}
 
+	}
+
+	/**
+	 * Upgrade to the latest database schema.
+	 */
+	public function upgrade() {
+		if ( Upgrade\upgrade_database() ) {
+			WP_CLI::success( 'Database version upgraded.' );
+			return;
+		}
+
+		WP_CLI::success( 'Database upgrade not required.' );
 	}
 }
